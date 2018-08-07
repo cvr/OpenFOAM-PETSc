@@ -1,0 +1,154 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v1806                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      dynamicMeshDict;
+}
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+motionSolverLibs    ("librigidBodyMeshMotion.so");
+
+dynamicFvMesh       dynamicOversetFvMesh;
+
+motionSolver        rigidBodyMotion;
+
+// rigidBodyMotionCoeffs  - not needed any more
+//  {
+    report          on;
+
+    solver
+    {
+        type Newmark;
+        gamma   0.1;    // Velocity integration coefficient
+        beta    0.1;    // Position integration coefficient
+    }
+
+    accelerationRelaxation 1.0;
+
+    //- prescribedRotation requires some sub-iterations to converge faster
+    //  to desired value.
+    nIter   3;
+
+    bodies
+    {
+        hull
+        {
+            type            rigidBody;
+            parent          root;
+
+            // Cuboid mass -- very simple setup. For more complicated shapes
+            // see utility surfaceInertia
+            mass            9;
+            rho             1;
+            inertia         (0.05 0 0 0.05 0 0.05);
+            centreOfMass    (0.21 -0.07 0); // relative to the centreOfMass
+                                            // of parent body
+                                            // (here root = global coord system)
+
+            // Transformation tensor and centre of rotation
+            transform       (1 0 0 0 1 0 0 0 1) (0.21 0 0);
+
+            joint
+            {
+                type            composite;
+                joints
+                (
+                    {
+                        type Pxyz;  // Allow movement in any direction
+                    }
+                    {
+                        type Rxyz;  // Allow rotation along any axis
+                                    // (local - body CS)
+                    }
+                );
+            }
+
+            patches         (hullWall);
+            innerDistance   100;    // With overset we want to avoid the mesh
+                                    // deformation so have large innerDistance
+            outerDistance   200;
+        } // end hull
+
+        propeller
+        {
+
+            type            rigidBody;
+            parent          hull;
+
+            centreOfMass    (-0.228 0.0 0);
+            mass            1;
+            rho             1;
+            inertia         (0.001 0 0 0.001 0 0.001);
+            transform       (1 0 0 0 1 0 0 0 1) (-0.228 0 0);
+            patches        (propellerWall);
+            innerDistance   100;
+            outerDistance   200;
+            joint
+            {
+                type            Rx;
+            }
+        } //end propeller
+
+        rudder
+        {
+            type            rigidBody;
+            parent          hull;//root;
+            centreOfMass    (-0.265 0 0);
+            mass            1;
+            rho             1;
+            inertia         (0.001 0 0 0.001 0 0.001);
+            transform       (1 0 0 0 1 0 0 0 1) (-0.265 0 0);
+            patches        (rudderWall);
+            innerDistance   100;
+            outerDistance   200;
+            joint
+            {
+                type            Ry;
+            }
+        }
+    }
+
+    restraints
+    {
+        rudderRotation
+        {
+            type                    prescribedRotation;
+            body                    rudder;
+            referenceOrientation    (1 0 0 0 1 0 0 0 1);
+            axis                    (0 1 0);    // Axis of rotation
+            omega                   sine;       // Function1 entry
+            omegaCoeffs
+            {
+                frequency   4;
+                amplitude   0.2;
+                scale       (0 1 0);
+                level       (0 1 0);
+            }
+        }
+        propellerRotation
+        {
+            type                    prescribedRotation;
+            body                    propeller;
+            referenceOrientation    (1 0 0 0 1 0 0 0 1);
+            axis                    (1 0 0);
+            omega                   table
+            (
+                (0 (0 0 0))
+                (1 (16 0 0))
+            );
+        }
+    }
+
+//  } // end of rigidBodyMotionCoeffs
+
+
+// ************************************************************************* //

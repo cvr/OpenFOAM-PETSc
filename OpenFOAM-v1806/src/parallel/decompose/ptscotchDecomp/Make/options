@@ -1,0 +1,24 @@
+sinclude $(GENERAL_RULES)/mplib$(WM_MPLIB)
+sinclude $(DEFAULT_RULES)/mplib$(WM_MPLIB)
+
+EXE_INC = \
+    $(PFLAGS) $(PINC) \
+    -I$(SCOTCH_INC_DIR) \
+    -I$(SCOTCH_ARCH_PATH)/include/$(FOAM_MPI) \
+    -I../decompositionMethods/lnInclude
+
+/*
+ * The '-lscotch' is a slight hack:
+ * ptscotch 6 requires scotch linked in, but does not declare the dependency
+ */
+LIB_LIBS = \
+    -L$(SCOTCH_LIB_DIR) \
+    -L$(FOAM_EXT_LIBBIN) \
+    -L$(FOAM_EXT_LIBBIN)/$(FOAM_MPI) \
+    -lptscotch -lptscotcherrexit \
+    -lscotch
+
+/* May require librt, but scotch does not declare the dependency */
+ifeq ("$(SO)","so")
+    LIB_LIBS += -lrt
+endif

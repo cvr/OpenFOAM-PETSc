@@ -1,0 +1,163 @@
+#!/bin/sh
+#------------------------------------------------------------------------------
+# =========                 |
+# \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+#  \\    /   O peration     |
+#   \\  /    A nd           | Copyright (C) 2018 OpenCFD Ltd.
+#    \\/     M anipulation  |
+#------------------------------------------------------------------------------
+# This file is part of OpenFOAM, licensed under the GNU General Public License
+# <http://www.gnu.org/licenses/>.
+#
+# Script
+#     makeADIOS2
+#
+# Description
+#     Build script for ADIOS2
+#
+# ----------------------------------------------
+# NO USER-CONFIGURABLE SETTINGS WITHIN THIS FILE
+#------------------------------------------------------------------------------
+# Run from third-party directory only
+cd ${0%/*} && wmakeCheckPwd "$WM_THIRD_PARTY_DIR" 2>/dev/null || {
+    echo "Error (${0##*/}) : not located in \$WM_THIRD_PARTY_DIR"
+    echo "    Check your OpenFOAM environment and installation"
+    exit 1
+}
+. etc/tools/ThirdPartyFunctions
+#------------------------------------------------------------------------------
+# ADIOS2 version from OpenFOAM etc/config.sh file:
+_foamConfig ADIOS2
+
+adios2PACKAGE=${adios2_version:-adios-none}
+
+#------------------------------------------------------------------------------
+usage() {
+    exec 1>&2
+    while [ "$#" -ge 1 ]; do echo "$1"; shift; done
+    cat<<USAGE
+
+usage: ${0##*/} [OPTION] [adios-VERSION]
+options:
+  -cmake PATH       With cmake from the path given
+  -gcc              Force gcc/g++ instead of the values from \$WM_CC, \$WM_CXX
+  -help
+
+* Build ADIOS2
+      $adios2PACKAGE
+
+USAGE
+    exit 1
+}
+#------------------------------------------------------------------------------
+exportCompiler true     # Compiler info + flags for CMake/configure
+
+# Parse options
+while [ "$#" -gt 0 ]
+do
+    case "$1" in
+    '') ;;      # Ignore empty
+    -h | -help) usage   ;;
+    -gcc)       useGcc  ;;
+
+    -cmake)
+        [ "$#" -ge 2 ] || die "'$1' option requires an argument"
+        CMAKE_PATH="${2%%/}"
+        shift
+        ;;
+    ADIOS2-[1-9]* | adios2-[1-9]* | ADIOS2-git* | adios2-git*)
+        adios2PACKAGE="${1%%/}"
+        ;;
+    *)
+        die "unknown option/argument: '$1'"
+        ;;
+    esac
+    shift
+done
+
+[ -n "$adios2PACKAGE" ] || die "The adios2-VERSION was not specified"
+
+# nothing to build
+if _foamIsNone "$adios2PACKAGE"
+then
+    echo "Using adios-none (skip ThirdParty build of ADIOS)"
+    exit 0
+elif _foamIsSystem "$adios2PACKAGE"
+then
+    echo "Using adios-system"
+    exit 0
+fi
+
+#------------------------------------------------------------------------------
+#
+# Build ADIOS
+#   ADIOS2_SOURCE_DIR : location of the original sources
+#   ADIOS2_ARCH_PATH  : installation directory
+
+ADIOS2_SOURCE_DIR=$sourceBASE/$adios2PACKAGE
+ADIOS2_ARCH_PATH=$installBASE/$adios2PACKAGE
+
+: ${FOAM_MPI:=dummy}
+
+echo
+echo ========================================
+echo "Build adios library $adiosPACKAGE for $FOAM_MPI"
+echo
+
+
+# Needs future adjustment
+# - for shared library
+# - for mpi-specific library locations
+if [ -f $ADIOS2_ARCH_PATH/include/adios.h \
+  -a -r $ADIOS2_ARCH_PATH/lib$WM_COMPILER_LIB_ARCH/libadios_${FOAM_MPI}.a ]
+then
+    echo "    ADIOS2 header in $ADIOS2_ARCH_PATH/include"
+    ### echo "    ADIOS2 libs   in $FOAM_EXT_LIBBIN"           # dynamic
+    echo "    ADIOS2 libs   in $ADIOS2_ARCH_PATH/lib$WM_COMPILER_LIB_ARCH" # static
+else
+    # CMake options often lag the configure ones
+    echo "Starting build: $adios2PACKAGE (using cmake)"
+    echo
+    (
+        buildDIR=$buildBASE/$adios2PACKAGE
+        cd $ADIOS2_SOURCE_DIR || exit 1
+        export GIT_DIR=$PWD/.git # Mask seeing our own git-repo
+
+        applyPatch $adios2PACKAGE $ADIOS2_SOURCE_DIR
+
+        # Remove any existing build folder and recreate
+        rm -rf $ADIOS2_ARCH_DIR
+        rm -rf $buildDIR 2>/dev/null
+        mkdir -p $buildDIR
+
+        # May not work properly with FOAM_MPI = dummy
+        if [ "$FOAM_MPI" = dummy ]
+        then
+            configOpt="$configOpt --without-mpi"
+        else
+            CC=mpicc
+            CXX=mpicxx
+        fi
+
+# HACK
+export ADIOS1_ROOT=/local/home/mark/openfoam/ThirdParty-plus/platforms/linux64Gcc/ADIOS-1.12.0
+
+        cmake=$(findCMake)
+
+        # Install into lib64/
+        cd $buildDIR && $cmake \
+            -DCMAKE_INSTALL_PREFIX=$ADIOS2_ARCH_PATH \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_FORTRAN=FALSE \
+            -DADIOS1_USE_STATIC_LIBS=TRUE \
+            ${WM_QUIET:+-DCMAKE_RULE_MESSAGES=OFF} \
+            $ADIOS2_SOURCE_DIR \
+        && make -j $WM_NCOMPPROCS all \
+        && make install \
+        && echo "Built: $adios2PACKAGE"
+    ) || {
+        echo "Error building: $adios2PACKAGE"
+    }
+fi
+
+# -----------------------------------------------------------------------------
