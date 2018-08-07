@@ -16,9 +16,9 @@ namespace Foam
 class PETScOpenFOAMCG : public lduMatrix::solver
 {
 
-	PETScOpenFOAMCG(const PETScOpenFOAMCG);
+	PETScOpenFOAMCG(const Foam::PETScOpenFOAMCG&);
 
-	void operator=(const PETScOpenFOAMCG);
+	void operator=(const Foam::PETScOpenFOAMCG);
 
 public:
 

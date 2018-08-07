@@ -21,6 +21,7 @@ VecPETSc2OpenFOAM(
 
 }
 
+static void
 VecOpenFOAM2PETSc(
 
 )

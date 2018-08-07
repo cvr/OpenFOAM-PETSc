@@ -1,7 +1,12 @@
+sinclude $(GENERAL_RULES)/mplib$(WM_MPLIB)
+sinclude $(DEFAULT_RULES)/mplib$(WM_MPLIB)
+
 EXE_INC = \
-    -I$(OBJECTS_DIR)
+    -I$(OBJECTS_DIR) $(PFLAGS) $(PINC)
 
 LIB_LIBS = \
     $(FOAM_LIBBIN)/libOSspecific.o \
     -L$(FOAM_LIBBIN)/dummy -lPstream \
-    -lz
+    -lz \
+    $(PLIBS)
+
